@@ -1,10 +1,7 @@
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 
-import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
 
 
@@ -19,30 +16,27 @@ public class SquareMap {
 	
 	SquareMap()
 	{
-		File intFile = new File("src/Grey.png");
-		File intFileVoid = new File("src/Grey.png");
-		File intFileSPS = new File("src/Grey.png");
 		InputStream red=null;
 		InputStream isVoid=null;
 		InputStream isSPS=null;
 		try
 		{
-		 red = new FileInputStream(intFile);
-		 isVoid = new FileInputStream(intFileVoid);
-		 isSPS = new FileInputStream(intFileSPS);
+		 red = SquareMap.class.getClassLoader().getResourceAsStream("Grey.png");
+		 isVoid = SquareMap.class.getClassLoader().getResourceAsStream("OddSQ.png");
+		 isSPS = SquareMap.class.getClassLoader().getResourceAsStream("Grey.png");
 		}
 		catch(Exception e)
 		{}
 		
-		toolTips.add("Empty Square");
-		DisplayText.add("E");
+		toolTips.add(GameConstants.TOOLTIP_SQ_NORMAL);
+		DisplayText.add("N");
 		Colors.add(new Image(null, red));
 		
-		toolTips.add("Void Square");
-		DisplayText.add("V");
+		toolTips.add(GameConstants.TOOLTIP_SQ_ODD);
+		DisplayText.add("O");
 		Colors.add(new Image(null, isVoid));
 		
-		toolTips.add("Secit Passage Square");
+		toolTips.add(GameConstants.TOOLTIP_SQ_SECRET_PASSAGE);
 		DisplayText.add("S");
 		Colors.add(new Image(null, isSPS));
 		

@@ -1,5 +1,5 @@
 
-public class GameSquare
+public class GameSquare implements Cloneable
 {
 
     private int X;
@@ -14,6 +14,17 @@ public class GameSquare
     private Connector bottom;
     private Connector left;
     private boolean completed = false;
+    
+    public Object clone() throws CloneNotSupportedException
+    {
+        GameSquare cloneGS = (GameSquare) super.clone();
+        cloneGS.top = (Connector) this.top.clone();
+        cloneGS.right = (Connector) this.right.clone();
+        cloneGS.bottom = (Connector) this.bottom.clone();
+        cloneGS.left = (Connector) this.left.clone();
+        
+        return cloneGS;
+    }
 
     public GameSquare(int x, int y, SquareType type, int maxX, int maxY, Connector top, Connector right,
             Connector bottom, Connector left)
@@ -62,24 +73,28 @@ public class GameSquare
             top.setPath(false);
             top.setBlocked(false);
             top.setLocked(false, GameConstants.UNLOCKED);
+            top.setGuess(false);
         }
         if ( right.isBlocked() && (right.getLockedLevel() > lockLevel || !right.isLocked()) )
         {
             right.setPath(false);
             right.setBlocked(false);
             right.setLocked(false, GameConstants.UNLOCKED);
+            right.setGuess(false);
         }
         if ( bottom.isBlocked() && (bottom.getLockedLevel() > lockLevel || !bottom.isLocked()) )
         {
             bottom.setPath(false);
             bottom.setBlocked(false);
             bottom.setLocked(false, GameConstants.UNLOCKED);
+            bottom.setGuess(false);
         }
         if ( left.isBlocked() && (left.getLockedLevel() > lockLevel || !left.isLocked()) )
         {
             left.setPath(false);
             left.setBlocked(false);
             left.setLocked(false, GameConstants.UNLOCKED);
+            left.setGuess(false);
         }
     }
 
@@ -135,6 +150,12 @@ public class GameSquare
      * return true; }
      */
 
+    /**
+     * set the completed status based on passed in parameter.
+     * 
+     * @param com
+     * @return returns true if a connection was changed, false other wise.
+     */
     boolean setCompleted(boolean com)
     {
         if ( com == this.completed )
@@ -143,21 +164,38 @@ public class GameSquare
         }
         if ( com )
         {
-            top.setBlocked(true);
-            right.setBlocked(true);
-            bottom.setBlocked(true);
-            left.setBlocked(true);
+            boolean returnValue = false;
+            if(!top.isBlocked())
+            {
+                top.setBlocked(true);
+                returnValue = true;
+            }
+            if(!right.isBlocked())
+            {
+                right.setBlocked(true);
+                returnValue = true;
+            }
+            if(!bottom.isBlocked())
+            {
+                bottom.setBlocked(true);
+                returnValue = true;
+            }
+            if(!left.isBlocked())
+            {
+                left.setBlocked(true);
+                returnValue = true;
+            }
             completed = com;
-            return true;
+            return returnValue;
         }
         else
         {
             completed = com;
-            return true;
+            return false;
         }
     }
 
-    boolean updateConnectionsBaseOnWalls()
+   /* boolean updateConnectionsBaseOnWalls()
     {
 
         top.updateBasedOnWall();
@@ -165,7 +203,7 @@ public class GameSquare
         bottom.updateBasedOnWall();
         left.updateBasedOnWall();
         return true;
-    }
+    }*/
 
     int getX()
     {
@@ -288,31 +326,74 @@ public class GameSquare
      * return false; }
      */
 
+    /**
+     * completes any path that is deterministic.
+     * 
+     * @return returns true if something was updated else false
+     */
     boolean setPathsIfDeterminiedAndLock()
     {
-        if ( !completed && numberOfOpenConnections() == numberOfOpenPaths() && numberOfOpenConnections() != 0 )
-        {
-            if ( !top.isBlocked() )
+        switch(getType().getType()) {
+            case GameConstants.SQ_TYPE_NORMAL:
             {
-                setAPathTo(1);
+                if ( !completed && numberOfOpenConnections() == numberOfOpenPaths() && numberOfOpenConnections() != 0 )
+                {
+                    if ( !top.isBlocked() )
+                    {
+                        setAPathTo(1);
 
+                    }
+                    if ( !right.isBlocked() )
+                    {
+                        setAPathTo(2);
+
+                    }
+                    if ( !bottom.isBlocked() )
+                    {
+                        setAPathTo(3);
+
+                    }
+                    if ( !left.isBlocked() )
+                    {
+                        setAPathTo(4);
+
+                    }
+                    return true;
+                }
+                return false;
             }
-            if ( !right.isBlocked() )
+            case GameConstants.SQ_TYPE_ODD:
             {
-                setAPathTo(2);
+                if(numberOfOpenConnections() == 1 && numberOfOpenPaths() == 2)
+                {
+                    if ( !top.isBlocked() )
+                    {
+                        top.setBlocked(true);
 
+                    }
+                    if ( !right.isBlocked() )
+                    {
+                        right.setBlocked(true);
+
+                    }
+                    if ( !bottom.isBlocked() )
+                    {
+                        bottom.setBlocked(true);
+
+                    }
+                    if ( !left.isBlocked() )
+                    {
+                        left.setBlocked(true);
+
+                    }
+                    return true;
+                }
+                return false;
             }
-            if ( !bottom.isBlocked() )
+            case GameConstants.SQ_TYPE_SECRET_PASSAGE:
             {
-                setAPathTo(3);
-
+                return false;
             }
-            if ( !left.isBlocked() )
-            {
-                setAPathTo(4);
-
-            }
-            return true;
         }
         return false;
     }
@@ -410,5 +491,10 @@ public class GameSquare
         {
             return (LocationOfLeftWall() + ((this.maxX + 1) * 2 - 1 - X));
         }
+    }
+    
+    public SquareType getType()
+    {
+        return type;
     }
 }

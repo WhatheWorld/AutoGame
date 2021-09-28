@@ -1,5 +1,5 @@
 
-public class Connector {
+public class Connector implements Cloneable {
 
 	/* 1 - wall
 	 * 2 - open
@@ -10,13 +10,32 @@ public class Connector {
 	private boolean isPath = false;
 	private boolean isLocked = false;
 	private int LockedLevel = 0;
+	private boolean isGuess = false;
 	/*
 	 *  0  is not locked 
-	 *  1 is hishes locked level, should never be unlocked, is for sure.
-	 *  2-999...  diffrent level of locks that can not be assumed as permenent.
+	 *  1 is highest locked level, should never be unlocked, is for sure.
+	 *  2-999...  Different level of locks that can not be assumed as permanent.
 	 */
 	
-	public Connector(Wall wall) {
+	public Object clone() throws CloneNotSupportedException
+    {
+	    Connector cloneC = (Connector) super.clone();
+	    cloneC.Wall = (Wall) this.Wall.clone();
+        
+        return cloneC;
+    }
+	
+	public boolean isGuess()
+    {
+        return isGuess;
+    }
+
+    public void setGuess(boolean isGuess)
+    {
+        this.isGuess = isGuess;
+    }
+
+    public Connector(Wall wall) {
 		this.Wall = wall;
 		if(Wall.getType().equals(GameBoard.WALL))
 		{
@@ -25,7 +44,7 @@ public class Connector {
 		}
 	}
 	
-	boolean updateBasedOnWall()
+	/*boolean updateBasedOnWall()
 	{
 		if(Wall.getType().equals(GameBoard.WALL))
 		{
@@ -34,7 +53,7 @@ public class Connector {
 			return true;
 		}
 		return false;
-	}
+	}*/
 
 	public boolean isBlocked() {
 		return blocked;

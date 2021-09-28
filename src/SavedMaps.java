@@ -1,8 +1,9 @@
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
+import java.io.BufferedReader;
 import java.io.FileWriter;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 import org.eclipse.swt.widgets.Button;
 
@@ -82,7 +83,7 @@ public class SavedMaps
     {
         JsonArray currentSaves = getSaved();
         
-        ArrayList<String> mapNames = new ArrayList();
+        ArrayList<String> mapNames = new ArrayList<String>();
         for(int index=0; index < currentSaves.size() ;index++)
         {
             mapNames.add(currentSaves.get(index).getAsJsonObject().get(JSON_NAME).getAsString());
@@ -106,9 +107,16 @@ public class SavedMaps
 
         try
         {
-            File saves = new File(FileName);
-            FileReader reader = new FileReader(saves);
-            currentSaves = parser.parse(reader).getAsJsonArray(); 
+            /*File saves = new File(FileName);
+            FileReader reader = new FileReader(saves);*/
+            
+            InputStream savedFile=null;
+            savedFile = SavedMaps.class.getClassLoader().getResourceAsStream("savedMaps.txt");
+            String test = new BufferedReader(new InputStreamReader(savedFile))
+                    .lines().collect(Collectors.joining("\n"));
+            currentSaves = parser.parse(test).getAsJsonArray();
+            
+           // currentSaves = parser.parse(reader).getAsJsonArray();
         }
         catch (Exception e)
         {
