@@ -1,8 +1,15 @@
 import org.eclipse.swt.widgets.Button;
 
-public class Wall {
+public class Wall implements Cloneable{
 	
 	private String type;
+	
+	public Object clone() throws CloneNotSupportedException
+    {
+	    Wall cloneC = (Wall) super.clone();
+        
+        return cloneC;
+    }
 
 	public Wall(Button btnWall) {
 		type = btnWall.getToolTipText();

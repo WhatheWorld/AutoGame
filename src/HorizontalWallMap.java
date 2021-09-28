@@ -1,5 +1,3 @@
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 
@@ -13,20 +11,18 @@ public class HorizontalWallMap {
 	
 	HorizontalWallMap()
 	{
-		File GreenFile = new File("src/Green.png");
-		File BlackFile = new File("src/Black.png");
-		File TanFile = new File("src/Tan.png");
 		InputStream tan=null;
 		InputStream green=null;
 		InputStream black=null;
+		
 		try
-		{
-			green = new FileInputStream(GreenFile);
-			black = new FileInputStream(BlackFile);
-			tan = new FileInputStream(TanFile);
-		}
-		catch(Exception e)
-		{}
+        {
+		    green = HorizontalWallMap.class.getClassLoader().getResourceAsStream("Green.png");
+		    black = HorizontalWallMap.class.getClassLoader().getResourceAsStream("Black.png");
+		    tan = HorizontalWallMap.class.getClassLoader().getResourceAsStream("Tan.png");
+        }
+        catch(Exception e)
+        {}
 		
 		
 		toolTips.add("Empty");

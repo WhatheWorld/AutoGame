@@ -5,19 +5,15 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Button;
 
 import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
-
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
-import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Text;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import org.eclipse.swt.widgets.List;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Spinner;
 
@@ -46,6 +42,7 @@ public class MapInput
     Spinner drawTimeSpinner;
     
     Text saveText;
+    Text solveTime;
     Combo loadSelect;
     
     SavedMaps savedMaps = new SavedMaps();
@@ -103,7 +100,7 @@ public class MapInput
 
         canvas = new Canvas(shell, SWT.NONE);
         canvas.setBounds(boardX * (square + WallWidth) + WallWidth + 10 + 100, 0, 600, 600);
-        GC gc = new GC(canvas);
+        
         // canvas.drawBackground(gc, 0, 0, 10, 10);
         canvas.addPaintListener(new PaintListener()
         {
@@ -115,6 +112,7 @@ public class MapInput
                 if ( gameBoard != null )
                 {
                     gameBoard.Draw(e.gc, e.display);
+                    e.gc.dispose();
 
                 }
                 else
@@ -130,7 +128,7 @@ public class MapInput
         drawTimeSpinner.setBounds(boardX * (square + WallWidth) + WallWidth + 10, 300, 60, 22);
         drawTimeSpinner.setMinimum(0);
         drawTimeSpinner.setMaximum(5000);
-        drawTimeSpinner.setSelection(500);
+        drawTimeSpinner.setSelection(0);
         
         saveText = new Text(shell, SWT.BORDER);
         saveText.setBounds(boardX * (square + WallWidth) + WallWidth + 10, 135, 75, 25);
@@ -145,6 +143,11 @@ public class MapInput
          {
              loadSelect.add(names.get(x));
          }
+         
+         solveTime = new Text(shell, SWT.BORDER);
+         solveTime.setBounds(boardX * (square + WallWidth) + WallWidth + 10, 330, 75, 25);
+         solveTime.setTextLimit(250);
+         solveTime.setEditable(false);
         
         
         btnLoad = new Button(shell, SWT.NONE);
@@ -298,8 +301,21 @@ public class MapInput
                         @Override
                         public void run()
                         {
-                            gameBoard.Solve(canvas, arg0.display, drawTime ,0);
-                            gameBoard.invokeRedrawAndWait(canvas, 1, arg0.display);
+                            long startTime = System.nanoTime();
+                            boolean redraw = gameBoard.Solve(canvas, arg0.display, drawTime ,0);
+                            long endTime = System.nanoTime();
+                            
+                            Long duration = (endTime - startTime);
+                           // if(redraw)
+                            {
+                                gameBoard.invokeRedrawAndWait(canvas, 1, arg0.display);
+                            }
+                            
+                            arg0.display.asyncExec(new Runnable() {
+                                public void run() {
+                                    solveTime.setText((duration.doubleValue()/1000000000) + " secs");
+                                 }
+                              });
                         }
 
                     });
@@ -363,6 +379,7 @@ public class MapInput
         loadSelect.setBounds(boardX * (square + WallWidth) + WallWidth + 10, 210, 75, 25);
         btnDelete.setBounds(boardX * (square + WallWidth) + WallWidth + 10, 270, 75, 25);
         drawTimeSpinner.setBounds(boardX * (square + WallWidth) + WallWidth + 10, 300, 60, 22);
+        solveTime.setBounds(boardX * (square + WallWidth) + WallWidth + 10, 330, 60, 22);
 
         for ( int x = 0 ; x < rawSquares.size() ; x++ )
         {

@@ -1,25 +1,39 @@
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Color;
-import org.eclipse.swt.graphics.Device;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Display;
 
-public class GameBoard
+public class GameBoard implements Cloneable
 {
 
     // string Constants
     public static final String WALL = "Wall";
     public static final String EXIT = "Exit";
+    
+    //ExecutorService pool = Executors.newFixedThreadPool(50);  
+    ThreadPoolExecutor pool = new ThreadPoolExecutor(50,100,1L,TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+    ThreadPoolExecutor pool2 = new ThreadPoolExecutor(3,10,1L,TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
     private ArrayList<ArrayList<GameSquare>> BoardSquares = new ArrayList<ArrayList<GameSquare>>();
     private ArrayList<Connector> BoardConnections = new ArrayList<Connector>();
+    
+    private ArrayList<ArrayList<GameSquare>> SolvedBoardSquares = new ArrayList<ArrayList<GameSquare>>();
+    private ArrayList<Connector> SolvedBoardConnections = new ArrayList<Connector>();
+    
     private int maxX;
     private int maxY;
+    private boolean ISSOLVED = false;
     ArrayList<ArrayList<Button>> rawSquares;
     ArrayList<Button> rawWalls;
 
@@ -31,6 +45,46 @@ public class GameBoard
 
     // wait times
     private long mainWait = 0;
+    
+    public Object clone() throws CloneNotSupportedException
+    {
+        GameBoard clone = (GameBoard) super.clone();
+        
+        clone.BoardConnections = new ArrayList<Connector>();
+        Iterator<Connector> tc = this.BoardConnections.iterator();
+        while(tc.hasNext())
+        {
+            clone.BoardConnections.add((Connector) tc.next().clone());
+        }
+        
+        clone.exitLocations = new ArrayList<Integer>();
+        Iterator<Integer> exl = this.exitLocations.iterator();
+        while(exl.hasNext())
+        {
+            clone.exitLocations.add( new Integer(exl.next()));
+        }
+        
+        // creates squares new so they have a pointer to the new connections
+        clone.BoardSquares = new ArrayList<ArrayList<GameSquare>>();
+        for ( int y = 0 ; y < this.maxY ; y++ )
+        {
+            clone.BoardSquares.add(new ArrayList<GameSquare>());
+            for ( int x = 0 ; x < this.maxX ; x++ )
+            {
+                SquareType type = this.BoardSquares.get(y).get(x).getType();
+                GameSquare square = new GameSquare(x, y, type, this.maxX, this.maxY,
+                        clone.BoardConnections.get(LocationOfTopWall(x, y)),
+                        clone.BoardConnections.get(LocationOfRightWall(x, y)),
+                        clone.BoardConnections.get(LocationOfBottomWall(x, y)),
+                        clone.BoardConnections.get(LocationOfLeftWall(x, y)));
+                clone.BoardSquares.get(y).add(square);
+            }
+        }
+        
+        
+        return clone;
+        
+    }
 
     public GameBoard(int x, int y, ArrayList<ArrayList<Button>> rawSquares, ArrayList<Button> rawWalls)
     {
@@ -39,6 +93,7 @@ public class GameBoard
         this.rawSquares = rawSquares;
         this.rawWalls = rawWalls;
         CreateBoardMapFromRawInputs();
+        pool.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
 
     }
 
@@ -132,8 +187,25 @@ public class GameBoard
                     guessingWalls = false;
 
                     // pass off to recursive solve to finish solving.
-
-                    return recursiveSolve(canvas, display, mainWaitTime, lockLevel+1, 5, 1);
+                    invokeRedrawAndWait(canvas, 1, display);
+                    
+                    try
+                    {
+                        //boolean solved = recursiveSolve(canvas, display, mainWaitTime, lockLevel+1, 3, 1);
+                        boolean solved = multiThreadRecursiveSolveManager(canvas, display, mainWaitTime, lockLevel+1);
+                        System.out.print("end: " +solved );
+                        System.out.println();
+                        pool.shutdownNow();
+                        pool2.shutdownNow();
+                        System.out.print("pool shutdown" );
+                        System.out.println();
+                        return false;
+                    }
+                    catch (CloneNotSupportedException e)
+                    {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
                 }
             }
 
@@ -143,9 +215,10 @@ public class GameBoard
                 con.setPath(true);
             }
             con.setBlocked(true);
+            con.setGuess(true);
 
             // assume as much as possible
-            updateConnections(canvas, display);
+            //not needed done in fillInDeterminedConnections updateConnections(canvas, display);
             fillInDeterminedConnections(canvas, display);
 
             // check to see what state your in
@@ -162,6 +235,7 @@ public class GameBoard
 
                 con.setBlocked(true);
                 con.setLocked(true, lockLevel);
+                con.setGuess(false);
                 if ( !guessingWalls )
                 {
                     con.setPath(false);
@@ -179,6 +253,7 @@ public class GameBoard
             }
             else
             {// not useful clean up, go to next assumption.
+                con.setGuess(false);
                 undoNonLockedPaths(canvas, display);
                 passCount++;
             }
@@ -187,10 +262,122 @@ public class GameBoard
         return true;
 
     }
+    
+    private boolean multiThreadRecursiveSolveManager(Canvas canvas, Display display, float mainWaitTime, int lockLevel) throws CloneNotSupportedException
+    {
+        int passCount = 0;
+        boolean guessingWalls = false;
+        int localHowDeepToGo =  1;
+
+        while ( true )
+        {
+            Connector con = getConnectionToGuess(passCount);
+            if ( con == null )
+            {
+                if ( !guessingWalls )
+                {
+                    guessingWalls = true;
+                    passCount = 0;
+                    con = getConnectionToGuess(passCount);
+                }
+                else
+                {
+                    guessingWalls = false;
+                    passCount = 0;
+                    localHowDeepToGo++;
+                    con = getConnectionToGuess(passCount);
+                    System.out.print("going deeper " + localHowDeepToGo);
+                    System.out.println();
+                }
+                if ( con == null )
+                {
+                    break;
+                }
+            }
+
+            // set up the temp wall/path
+            if ( !guessingWalls )
+            {
+                con.setPath(true);
+            }
+            con.setBlocked(true);
+            con.setLocked(true, lockLevel);
+            con.setGuess(true);
+            
+            
+            while(pool2.getQueue().size() > 10)
+            {
+                if(ISSOLVED)
+                {
+                    return true;
+                }
+                try
+                {
+                    System.out.print("waiting higher: " + pool2.getQueue().size());
+                    System.out.println();
+                    TimeUnit.MILLISECONDS.sleep(1000);
+                }
+                catch (InterruptedException e)
+                {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+            }
+            
+            if(ISSOLVED)
+            {
+                return true;
+            }
+            
+            pool2.execute( new Thread(new Runnable() {
+                private GameBoard myGame;
+                private int howDeepToGo;
+
+                public Runnable init(GameBoard myGame, int howDeepToGo) {
+                    this.myGame = myGame;
+                    this.howDeepToGo = howDeepToGo;
+                    return this;
+                }
+
+                @Override
+                public void run() {
+                    try
+                    {
+                        /*System.out.print("starting new thread " + threadsRunning);
+                        System.out.println();*/
+                        
+                        if(this.myGame.recursiveSolve(canvas, display, mainWaitTime, lockLevel+1, howDeepToGo, 1))
+                        {
+                            ISSOLVED = true;
+                            SolvedBoardConnections = this.myGame.SolvedBoardConnections;
+                            SolvedBoardSquares = this.myGame.SolvedBoardSquares;
+                        }
+                    }
+                    catch(Exception e)
+                    {
+                        e.printStackTrace();
+                        /*System.out.print("drawing " + threadsRunning);
+                        System.out.println();
+                        this.myGame.invokeRedrawAndWait(canvas, 1, display);*/
+                    }
+                    /*System.out.print("ending thread " + threadsRunning);
+                    System.out.println();*/
+                }
+            }.init((GameBoard) this.clone(), localHowDeepToGo)));//.start();
+            
+
+            con.setGuess(false);
+            unLockAllPathsHiegher(canvas, display, lockLevel-1);
+            passCount++;
+        }
+        return false;
+    }
 
     private boolean recursiveSolve(Canvas canvas, Display display, float mainWaitTime, int lockLevel, int howDeepToGo,
-            int howDeepIAm)
+            int howDeepIAm) throws CloneNotSupportedException
     {
+       System.out.print("recursiveSolve start: " +howDeepIAm );
+       System.out.println();
         int passCount = 0;
         boolean guessingWalls = false;
 
@@ -222,7 +409,78 @@ public class GameBoard
             }
             con.setBlocked(true);
             con.setLocked(true, lockLevel);
-            boolean solved = oneGuessTryToSolve(canvas, display, lockLevel +1);
+            con.setGuess(true);
+            boolean solved = false;
+            
+            if(howDeepToGo != howDeepIAm )
+            {
+                if (recursiveSolve(canvas, display, mainWaitTime, lockLevel+1, howDeepToGo, howDeepIAm+1) || ISSOLVED )
+                {
+                    return true;
+                }
+            }
+            else{
+                //solved = oneGuessTryToSolve(canvas, display, lockLevel +1);
+                while(pool.getQueue().size() > 200)
+                {
+                    if(ISSOLVED)
+                    {
+                        return true;
+                    }
+                    try
+                    {
+                        System.out.print("waiting: " + pool.getQueue().size());
+                        System.out.println();
+                        TimeUnit.MILLISECONDS.sleep(500);
+                    }
+                    catch (InterruptedException e)
+                    {
+                        // TODO Auto-generated catch block
+                        //e.printStackTrace();
+                    }
+                }
+                
+                if(pool.isShutdown())
+                    return false;
+                pool.execute(
+                new Thread(new Runnable() {
+                    private GameBoard myGame;
+
+                    public Runnable init(GameBoard myGame) {
+                        this.myGame = myGame;
+                        return this;
+                    }
+
+                    @Override
+                    public void run() {
+                        try
+                        {
+                            /*System.out.print("starting new thread " + threadsRunning);
+                            System.out.println();*/
+                            if(this.myGame.oneGuessTryToSolve(canvas, display, lockLevel +1))
+                            {
+                                if(ISSOLVED)
+                                   return;
+                                ISSOLVED = true;
+                                System.out.print("solved rec");
+                                System.out.println();
+                                SolvedBoardConnections = this.myGame.BoardConnections;
+                                SolvedBoardSquares = this.myGame.BoardSquares;
+                            }
+                        }
+                        catch(Exception e)
+                        {
+                            e.printStackTrace();
+                            /*System.out.print("drawing " + threadsRunning);
+                            System.out.println();
+                            this.myGame.invokeRedrawAndWait(canvas, 1, display);*/
+                        }
+                        /*System.out.print("ending thread " + threadsRunning);
+                        System.out.println();*/
+                    }
+                }.init((GameBoard) this.clone())));//.start();
+            }
+            
 
             if ( solved )
             {
@@ -230,18 +488,19 @@ public class GameBoard
             }
             else
             {
+                con.setGuess(false);
                 unLockAllPathsHiegher(canvas, display, lockLevel-1);
                 passCount++;
             }
 
         }
 
-        if ( howDeepIAm < howDeepToGo )
+        /*if ( howDeepIAm < howDeepToGo || howDeepToGo == -1)
         {
             // go deeper
             return recursiveSolve(canvas, display, mainWaitTime, lockLevel+1, howDeepToGo, howDeepIAm+1);
-        }
-        else
+        }*/
+        //else
         {
             // gone as deep as I am suppose to go return
             return false;
@@ -280,9 +539,10 @@ public class GameBoard
                 con.setPath(true);
             }
             con.setBlocked(true);
+            con.setGuess(true);
 
             // assume as much as possible
-            updateConnections(canvas, display);
+            //updateConnections(canvas, display);
             fillInDeterminedConnections(canvas, display);
 
             // check to see what state your in
@@ -299,6 +559,7 @@ public class GameBoard
 
                 con.setBlocked(true);
                 con.setLocked(true, lockLevel);
+                con.setGuess(false);
                 if ( !guessingWalls )
                 {
                     con.setPath(false);
@@ -316,6 +577,7 @@ public class GameBoard
             }
             else
             {// not useful clean up, go to next assumption.
+                con.setGuess(false);
                 undoNonLockedPaths(canvas, display);
                 passCount++;
             }
@@ -357,17 +619,34 @@ public class GameBoard
             for ( int x = 0 ; x < this.maxX ; x++ )
             {
                 GameSquare square = BoardSquares.get(y).get(x);
-                if ( square.numberOfOpenPaths() > square.numberOfOpenConnections() || square.getNumberOfPaths() > 2 )
-                {
-                    return true;
+                switch(square.getType().getType()) {
+                    case 1: //normal square
+                    {
+                        if ( square.numberOfOpenPaths() > square.numberOfOpenConnections() || square.getNumberOfPaths() > 2 )
+                        {
+                            return true;
+                        }
+                        break;
+                    }
+                    case 2: //odd square
+                    {
+                        if( square.getNumberOfPaths() != 0)
+                        {
+                            if ( square.numberOfOpenPaths() > square.numberOfOpenConnections() || square.getNumberOfPaths() > 2 )
+                            {
+                                return true;
+                            }
+                        }
+                        break;
+                    }
                 }
             }
         }
-        if ( isThereALoop() )
+        if ( validNumberOfExits().size() < 2 )
         {
             return true;
         }
-        if ( validNumberOfExits().size() < 2 )
+        if ( isThereALoop() )
         {
             return true;
         }
@@ -440,9 +719,27 @@ public class GameBoard
             for ( int x = 0 ; x < this.maxX ; x++ )
             {
                 GameSquare square = BoardSquares.get(y).get(x);
-                if ( square.numberOfOpenPaths() > 0 )
+                switch(square.getType().getType()) 
                 {
-                    return false;
+                    case 1: //normal square
+                    {
+                        if ( square.numberOfOpenPaths() > 0 )
+                        {
+                            return false;
+                        }
+                        break;
+                    }
+                    case 2: //odd square
+                    {
+                        if( square.getNumberOfPaths() != 0)
+                        {
+                            if ( square.numberOfOpenPaths() > 0 )
+                            {
+                                return false;
+                            }
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -452,14 +749,16 @@ public class GameBoard
 
     boolean isThereALoop()
     {
+        HashMap<String, Boolean> map = new HashMap<String, Boolean>();
         for ( int y = 0 ; y < this.maxY ; y++ )
         {
             for ( int x = 0 ; x < this.maxX ; x++ )
             {
                 GameSquare square = BoardSquares.get(y).get(x);
-                if ( square.numberOfOpenPaths() == 0 )
+                if ( square.numberOfOpenPaths() == 0 && !map.containsKey(square.getX() + GameConstants.DELIMITER + square.getY()))
                 {
-                    if ( startLoopChecking(square) )
+                    map.put(square.getX() + GameConstants.DELIMITER + square.getY(), true);
+                    if ( startLoopChecking(square,map) )
                     {
                         return true;
                     }
@@ -470,16 +769,16 @@ public class GameBoard
         return false;
     }
 
-    boolean startLoopChecking(GameSquare startingPoint)
+    boolean startLoopChecking(GameSquare startingPoint, HashMap<String, Boolean> map)
     {
         int dir = startingPoint.getPath1().getDirection();
-        return loopCheckingRecercive(startingPoint, getSquare(startingPoint, dir), reversDirection(dir));
+        return loopCheckingRecercive(startingPoint, getSquare(startingPoint, dir), reversDirection(dir),map);
 
         // return false;
     }
 
-    boolean loopCheckingRecercive(GameSquare startingPoint, GameSquare currentPoint, int cameFromDirection)
-    {
+    boolean loopCheckingRecercive(GameSquare startingPoint, GameSquare currentPoint, int cameFromDirection, HashMap<String, Boolean> map)
+    {        
         if ( currentPoint == null || currentPoint.numberOfOpenPaths() > 0 )
         {
             return false;
@@ -503,9 +802,31 @@ public class GameBoard
             nextSquare = getSquare(currentPoint, currentPoint.getPath2().getDirection());
             direction = currentPoint.getPath2().getDirection();
         }
+        
+        if(nextSquare != null)
+        {
+            map.put(nextSquare.getX() + GameConstants.DELIMITER + nextSquare.getY(), true);
+        }
 
-        return loopCheckingRecercive(startingPoint, nextSquare, reversDirection(direction));
+        return loopCheckingRecercive(startingPoint, nextSquare, reversDirection(direction), map );
 
+    }
+    
+    boolean anyThreeConactions()
+    {
+        for(int x = 0 ; x < BoardSquares.size() ; x++)
+        {
+            ArrayList<GameSquare> sq = BoardSquares.get(x);
+            for(int y = 0 ; y<sq.size();y++)
+            {
+                GameSquare gamesq = sq.get(y);
+                if(gamesq.getNumberOfPaths() >2)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     int reversDirection(int direction)
@@ -666,6 +987,7 @@ public class GameBoard
                 GameSquare square = BoardSquares.get(y).get(x);
                 if ( square.setPathsIfDeterminiedAndLock() )
                 {
+                    square.updateCompleted();
                     updated = true;
                 }
             }
@@ -680,17 +1002,19 @@ public class GameBoard
     void updateConnections(Canvas canvas, Display display)
     {
         boolean badUpdate = false;
+        int passes = 0;
 
         do
         {
             badUpdate = false;
+            passes++;
             for ( int y = 0 ; y < this.maxY ; y++ )
             {
                 for ( int x = 0 ; x < this.maxX ; x++ )
                 {
                     GameSquare square = BoardSquares.get(y).get(x);
                     // square.updateConnectionsBasedOnPaths();
-                    square.updateConnectionsBaseOnWalls();
+                   // square.updateConnectionsBaseOnWalls();
                     // square.updatePathBasedOnConnections();
                     if ( square.updateCompleted() )
                     {
@@ -700,6 +1024,8 @@ public class GameBoard
             }
         }
         while ( badUpdate );
+        /*System.out.print("updateConnections passes: " + passes);
+        System.out.println();*/
         invokeRedrawAndWait(canvas, mainWait, display);
     }
 
@@ -731,7 +1057,15 @@ public class GameBoard
 
     public void Draw(GC gc, Display display)
     {
+        if(ISSOLVED)
+        {
+            BoardConnections = SolvedBoardConnections;
+            BoardSquares = SolvedBoardSquares;
+        }
         int boxSize = drawBoxSize;
+        
+        DrawBackground(gc);
+        
         // gc.drawLine(0, 5, 10, 10);
         // draw base grid
         for ( int y = 0 ; y <= this.maxY ; y++ )
@@ -804,6 +1138,32 @@ public class GameBoard
             }
         }
     }
+    
+    private void DrawBackground(GC gc )
+    {
+        
+        InputStream isVoid=null;
+        try
+        {
+         isVoid = GameBoard.class.getClassLoader().getResourceAsStream("OddSQ.png");
+        }
+        catch(Exception e)
+        {}
+        Image try1 = new Image(null, isVoid);
+        
+        for ( int y = 0 ; y < this.maxY ; y++ )
+        {
+            for ( int x = 0 ; x < this.maxX ; x++ )
+            {
+                GameSquare square = BoardSquares.get(y).get(x);
+                
+                if(square.getType().getType() == 2)
+                {
+                    gc.drawImage(try1, 0, 0, 81, 81, square.getX() * this.drawBoxSize, square.getY() * this.drawBoxSize, 50, 50);
+                }
+            }
+        }
+    }
 
     private void DrawSquare(GameSquare square, GC gc, Display display)
     {
@@ -811,18 +1171,30 @@ public class GameBoard
         int x = square.getX() * this.drawBoxSize + this.drawBoxSize / 2;
         int y = square.getY() * this.drawBoxSize + this.drawBoxSize / 2;
         gc.setBackground(display.getSystemColor(SWT.COLOR_BLUE));
-
+        
         if ( square.getPath1() != null )
         {
             if ( square.getPath1().isLocked() )
+            {
                 gc.setBackground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
+            }
+            if( square.getConnectorBasedOnDirection(square.getPath1().getDirection()).isGuess())
+            {
+                gc.setBackground(display.getSystemColor(SWT.COLOR_YELLOW));
+            }
             DrawSquareHelper(x, y, square.getPath1().getDirection(), gc);
             gc.setBackground(display.getSystemColor(SWT.COLOR_BLUE));
         }
         if ( square.getPath2() != null )
         {
             if ( square.getPath2().isLocked() )
+            {
                 gc.setBackground(display.getSystemColor(SWT.COLOR_DARK_GRAY));
+            }
+            if( square.getConnectorBasedOnDirection(square.getPath2().getDirection()).isGuess())
+            {
+                gc.setBackground(display.getSystemColor(SWT.COLOR_YELLOW));
+            }
             DrawSquareHelper(x, y, square.getPath2().getDirection(), gc);
         }
 
@@ -869,6 +1241,7 @@ public class GameBoard
         Color Green = display.getSystemColor(SWT.COLOR_GREEN);
         Color Grey = display.getSystemColor(SWT.COLOR_DARK_GRAY);
         Color Blue = display.getSystemColor(SWT.COLOR_BLUE);
+        Color Yellow = display.getSystemColor(SWT.COLOR_YELLOW);
 
         if ( btnType.equals(GameConstants.WALL) )
         {
@@ -893,6 +1266,11 @@ public class GameBoard
         else if ( !connector.isLocked() )
         {
             gc.setBackground(Blue);
+        }
+        
+        if(connector.isGuess() && !connector.isPath())
+        {
+            gc.setBackground(Yellow);
         }
 
         if ( btnX > btnY )
