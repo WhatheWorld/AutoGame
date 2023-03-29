@@ -160,8 +160,8 @@ public class MapInput
             public void handleEvent(Event arg0)
             {
                 JsonObject map = savedMaps.get(loadSelect.getSelectionIndex());
-                boardX = map.get(savedMaps.JSON_X).getAsInt();
-                boardY = map.get(savedMaps.JSON_Y).getAsInt();
+                boardX = map.get(SavedMaps.JSON_X).getAsInt();
+                boardY = map.get(SavedMaps.JSON_Y).getAsInt();
                 updateBoadSize();
                 updateBoadFromSavedMap(map);
                 
@@ -306,7 +306,7 @@ public class MapInput
                             long endTime = System.nanoTime();
                             
                             Long duration = (endTime - startTime);
-                           // if(redraw)
+                            if(redraw)
                             {
                                 gameBoard.invokeRedrawAndWait(canvas, 1, arg0.display);
                             }
@@ -332,7 +332,7 @@ public class MapInput
     
     public void updateBoadFromSavedMap(JsonObject map)
     {
-        JsonArray squares = map.get(savedMaps.JSON_SQUARE).getAsJsonArray();
+        JsonArray squares = map.get(SavedMaps.JSON_SQUARE).getAsJsonArray();
         int indexS =0;
         for ( int x = 0 ; x < rawSquares.size() ; x++ )
         {
@@ -340,7 +340,7 @@ public class MapInput
             {
                 Button btnSquare = rawSquares.get(x).get(y);
                 JsonObject savedSquare= squares.get(indexS).getAsJsonObject();
-                String type = savedSquare.get(savedMaps.JSON_SQUARE_TYPE).getAsString();
+                String type = savedSquare.get(SavedMaps.JSON_SQUARE_TYPE).getAsString();
                 btnSquare.setToolTipText(type);
                 btnSquare.setImage(SquareMap.getImage(type));
                         
@@ -348,13 +348,13 @@ public class MapInput
             }
         }
         
-        JsonArray walls = map.get(savedMaps.JSON_WALL).getAsJsonArray();
+        JsonArray walls = map.get(SavedMaps.JSON_WALL).getAsJsonArray();
         int indexWall = 0;
         for ( int x = 0 ; x < rawWalls.size() ; x++ )
         {
             Button btnWall = rawWalls.get(x);
             JsonObject savedWall = walls.get(indexWall).getAsJsonObject();
-            String type = savedWall.get(savedMaps.JSON_WALL_TYPE).getAsString();
+            String type = savedWall.get(SavedMaps.JSON_WALL_TYPE).getAsString();
             btnWall.setToolTipText(type);
             btnWall.setImage(wallMap.getImage(type));
             indexWall++;

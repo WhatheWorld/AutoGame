@@ -74,11 +74,6 @@ public class SavedMaps
         return currentSaves.get(x).getAsJsonObject();
     }
 
-    private JsonObject get(String Name)
-    {
-        return null;
-    }
-
     public ArrayList<String> getSavedMapNames()
     {
         JsonArray currentSaves = getSaved();

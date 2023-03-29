@@ -199,7 +199,7 @@ public class GameBoard implements Cloneable
                         pool2.shutdownNow();
                         System.out.print("pool shutdown" );
                         System.out.println();
-                        return false;
+                        return solved;
                     }
                     catch (CloneNotSupportedException e)
                     {
@@ -313,7 +313,7 @@ public class GameBoard implements Cloneable
                 }
                 try
                 {
-                    System.out.print("waiting higher: " + pool2.getQueue().size());
+                    System.out.print("waiting higher: " + pool2.getQueue().size() + "passcount: " + passCount);
                     System.out.println();
                     TimeUnit.MILLISECONDS.sleep(1000);
                 }
@@ -1002,20 +1002,15 @@ public class GameBoard implements Cloneable
     void updateConnections(Canvas canvas, Display display)
     {
         boolean badUpdate = false;
-        int passes = 0;
 
         do
         {
             badUpdate = false;
-            passes++;
             for ( int y = 0 ; y < this.maxY ; y++ )
             {
                 for ( int x = 0 ; x < this.maxX ; x++ )
                 {
                     GameSquare square = BoardSquares.get(y).get(x);
-                    // square.updateConnectionsBasedOnPaths();
-                   // square.updateConnectionsBaseOnWalls();
-                    // square.updatePathBasedOnConnections();
                     if ( square.updateCompleted() )
                     {
                         badUpdate = true;
